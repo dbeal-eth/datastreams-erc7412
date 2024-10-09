@@ -61,7 +61,7 @@ contract DataStreamsERC7412Compatible is IERC7412, Withdraw {
     function getLatestPrice(
         bytes32 feedId,
         uint32 stalenessTolerance
-    ) public returns (int192) {
+    ) public view returns (int192) {
         uint32 latestPriceTimestamp = s_latestPriceTimestamp[feedId];
         uint32 considerStaleAfter = latestPriceTimestamp +
             stalenessTolerance;
@@ -81,15 +81,15 @@ contract DataStreamsERC7412Compatible is IERC7412, Withdraw {
         );
 
         // Fees can be paid in either LINK (i_linkAddress()) or native coin ERC20-wrapped version (i_nativeAddress())
-        IFeeManager feeManager = IFeeManager(address(verifier.s_feeManager()));
-        address feeTokenAddress = feeManager.i_linkAddress();
-        (Common.Asset memory fee, , ) = feeManager.getFeeAndReward(
+        //IFeeManager feeManager = IFeeManager(address(verifier.s_feeManager()));
+        //address feeTokenAddress = feeManager.i_linkAddress();
+        /*(Common.Asset memory fee, , ) = feeManager.getFeeAndReward(
             address(this),
             "",
             feeTokenAddress
-        );
+        );*/
 
-        revert IERC7412.OracleDataRequired(address(this), oracleQuery, fee.amount);
+        revert IERC7412.OracleDataRequired(address(this), oracleQuery, 0);
     }
 
     /**
@@ -98,6 +98,45 @@ contract DataStreamsERC7412Compatible is IERC7412, Withdraw {
 		 * @param forTimestamp - The timestamp in the past that should be retrieved
      */
     function getPriceForTimestamp(
+        bytes32 feedId,
+        uint32 forTimestamp
+    ) public view returns (int192) {
+        int192 price = s_priceSnapshots[feedId][forTimestamp];
+
+				// consider the prices to be populated if its non-0
+				// if a price is actually reported as 0, its probably either a price feed nobody would ever care about, or its an error.
+        if (
+					price != 0
+        ) {
+            return price;
+        }
+
+        bytes memory oracleQuery = abi.encode(
+            STRING_DATASTREAMS_FEEDLABEL,
+            feedId,
+            STRING_DATASTREAMS_QUERYLABEL,
+            forTimestamp,
+            ""
+        );
+
+        // Fees can be paid in either LINK (i_linkAddress()) or native coin ERC20-wrapped version (i_nativeAddress())
+        /*IFeeManager feeManager = IFeeManager(address(verifier.s_feeManager()));
+        address feeTokenAddress = feeManager.i_linkAddress();
+        (Common.Asset memory fee, , ) = feeManager.getFeeAndReward(
+            address(this),
+            "",
+            feeTokenAddress
+        );*/
+
+        revert IERC7412.OracleDataRequired(address(this), oracleQuery, 0);
+    }
+
+    /**
+     * @notice Same as `getPriceForTimestampAndClean`, but . Call this function instead of the original for some gas savings.
+     * @param feedId - Stream ID which can be found at https://docs.chain.link/data-streams/stream-ids
+		 * @param forTimestamp - The timestamp in the past that should be retrieved
+     */
+    function getPriceForTimestampAndClean(
         bytes32 feedId,
         uint32 forTimestamp
     ) public returns (int192) {
@@ -125,15 +164,15 @@ contract DataStreamsERC7412Compatible is IERC7412, Withdraw {
         );
 
         // Fees can be paid in either LINK (i_linkAddress()) or native coin ERC20-wrapped version (i_nativeAddress())
-        IFeeManager feeManager = IFeeManager(address(verifier.s_feeManager()));
+        /*IFeeManager feeManager = IFeeManager(address(verifier.s_feeManager()));
         address feeTokenAddress = feeManager.i_linkAddress();
         (Common.Asset memory fee, , ) = feeManager.getFeeAndReward(
             address(this),
             "",
             feeTokenAddress
-        );
+        );*/
 
-        revert IERC7412.OracleDataRequired(address(this), oracleQuery, fee.amount);
+        revert IERC7412.OracleDataRequired(address(this), oracleQuery, 0);
     }
 
     function fulfillOracleQuery(
