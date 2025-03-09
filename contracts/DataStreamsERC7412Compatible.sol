@@ -79,15 +79,6 @@ contract DataStreamsERC7412Compatible is IERC7412, Withdraw {
         bytes memory oracleQuery =
             abi.encode(STRING_DATASTREAMS_FEEDLABEL, feedId, STRING_DATASTREAMS_QUERYLABEL, block.timestamp, "");
 
-        // Fees can be paid in either LINK (i_linkAddress()) or native coin ERC20-wrapped version (i_nativeAddress())
-        //IFeeManager feeManager = IFeeManager(address(verifier.s_feeManager()));
-        //address feeTokenAddress = feeManager.i_linkAddress();
-        /*(Common.Asset memory fee, , ) = feeManager.getFeeAndReward(
-            address(this),
-            "",
-            feeTokenAddress
-        );*/
-
         revert IERC7412.OracleDataRequired(address(this), oracleQuery, 0);
     }
 
@@ -111,15 +102,6 @@ contract DataStreamsERC7412Compatible is IERC7412, Withdraw {
 
         bytes memory oracleQuery =
             abi.encode(STRING_DATASTREAMS_FEEDLABEL, feedId, STRING_DATASTREAMS_QUERYLABEL, forTimestamp, "");
-
-        // Fees can be paid in either LINK (i_linkAddress()) or native coin ERC20-wrapped version (i_nativeAddress())
-        /*IFeeManager feeManager = IFeeManager(address(verifier.s_feeManager()));
-        address feeTokenAddress = feeManager.i_linkAddress();
-        (Common.Asset memory fee, , ) = feeManager.getFeeAndReward(
-            address(this),
-            "",
-            feeTokenAddress
-        );*/
 
         revert IERC7412.OracleDataRequired(address(this), oracleQuery, 0);
     }
@@ -146,15 +128,6 @@ contract DataStreamsERC7412Compatible is IERC7412, Withdraw {
         bytes memory oracleQuery =
             abi.encode(STRING_DATASTREAMS_FEEDLABEL, feedId, STRING_DATASTREAMS_QUERYLABEL, forTimestamp, "");
 
-        // Fees can be paid in either LINK (i_linkAddress()) or native coin ERC20-wrapped version (i_nativeAddress())
-        /*IFeeManager feeManager = IFeeManager(address(verifier.s_feeManager()));
-        address feeTokenAddress = feeManager.i_linkAddress();
-        (Common.Asset memory fee, , ) = feeManager.getFeeAndReward(
-            address(this),
-            "",
-            feeTokenAddress
-        );*/
-
         revert IERC7412.OracleDataRequired(address(this), oracleQuery, 0);
     }
 
@@ -166,9 +139,26 @@ contract DataStreamsERC7412Compatible is IERC7412, Withdraw {
 
         // Handle billing
         IFeeManager feeManager = IFeeManager(address(verifier.s_feeManager()));
-        IRewardManager rewardManager = IRewardManager(address(feeManager.i_rewardManager()));
 
-        address feeTokenAddress = feeManager.i_linkAddress();
+        address feeTokenAddress;
+        if (address(feeManager) != address(0)) {
+            IRewardManager rewardManager = IRewardManager(address(feeManager.i_rewardManager()));
+            feeTokenAddress = feeManager.i_linkAddress();
+
+            // send the fee
+            (Common.Asset memory fee,,) = feeManager.getFeeAndReward(address(this), reportData, feeTokenAddress);
+
+            if (IERC20(feeTokenAddress).balanceOf(address(this)) < fee.amount) {
+                revert IERC7412.FeeRequired(fee.amount);
+            } else {
+                // NOTE: retrieval of prevAllownace here is to satisfy minor audit finding of possible "subtle bugs" due to existing allowance
+                uint256 prevAllowance = IERC20(feeTokenAddress).allowance(address(this), address(rewardManager));
+                bool result = IERC20(feeTokenAddress).approve(address(rewardManager), prevAllowance + fee.amount);
+                if (!result) {
+                    revert UnexpectedApproveResult(feeTokenAddress, fee.amount);
+                }
+            }
+        }
 
         // Verify the report
         bytes memory verifiedReportData = verifier.verify(signedReport, abi.encode(feeTokenAddress));
@@ -189,20 +179,6 @@ contract DataStreamsERC7412Compatible is IERC7412, Withdraw {
         if (s_latestPriceTimestamp[verifiedReport.feedId] < verifiedReport.observationsTimestamp) {
             s_priceSnapshots[verifiedReport.feedId][s_latestPriceTimestamp[verifiedReport.feedId]] = 0;
             s_latestPriceTimestamp[verifiedReport.feedId] = verifiedReport.observationsTimestamp;
-        }
-
-        // send the fee
-        (Common.Asset memory fee,,) = feeManager.getFeeAndReward(address(this), reportData, feeTokenAddress);
-
-        if (IERC20(feeTokenAddress).balanceOf(address(this)) < fee.amount) {
-            revert IERC7412.FeeRequired(fee.amount);
-        } else {
-            // NOTE: retrieval of prevAllownace here is to satisfy minor audit finding of possible "subtle bugs" due to existing allowance
-            uint256 prevAllowance = IERC20(feeTokenAddress).allowance(address(this), address(rewardManager));
-            bool result = IERC20(feeTokenAddress).approve(address(rewardManager), prevAllowance + fee.amount);
-            if (!result) {
-                revert UnexpectedApproveResult(feeTokenAddress, fee.amount);
-            }
         }
 
         // Log price from report
